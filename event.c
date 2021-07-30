@@ -1313,6 +1313,8 @@ event_signal_closure(struct event_base *base, struct event *ev)
 	short ncalls;
 	int should_break;
 
+
+
 	/* Allows deletes to work */
 	ncalls = ev->ev_ncalls;
 	if (ncalls != 0)
@@ -1518,6 +1520,7 @@ done:
 static inline void
 event_persist_closure(struct event_base *base, struct event *ev)
 {
+	event_debug(("evetn_persist_closure: 1"));
 	void (*evcb_callback)(evutil_socket_t, short, void *);
 
         // Other fields of *ev that must be stored before executing
@@ -1525,8 +1528,11 @@ event_persist_closure(struct event_base *base, struct event *ev)
         short evcb_res;
         void *evcb_arg;
 
+    event_debug(("evetn_persist_closure: 2"));
 	/* reschedule the persistent event if we have a timeout. */
 	if (ev->ev_io_timeout.tv_sec || ev->ev_io_timeout.tv_usec) {
+
+		event_debug(("evetn_persist_closure: 3"));
 		/* If there was a timeout, we want it to run at an interval of
 		 * ev_io_timeout after the last time it was _scheduled_ for,
 		 * not ev_io_timeout after _now_.  If it fired for another
@@ -1537,6 +1543,8 @@ event_persist_closure(struct event_base *base, struct event *ev)
 			&ev->ev_io_timeout));
 		gettime(base, &now);
 		if (is_common_timeout(&ev->ev_timeout, base)) {
+
+			event_debug(("evetn_persist_closure: 4"));
 			delay = ev->ev_io_timeout;
 			usec_mask = delay.tv_usec & ~MICROSECONDS_MASK;
 			delay.tv_usec &= MICROSECONDS_MASK;
@@ -1547,6 +1555,8 @@ event_persist_closure(struct event_base *base, struct event *ev)
 				relative_to = now;
 			}
 		} else {
+
+			event_debug(("evetn_persist_closure: 5"));
 			delay = ev->ev_io_timeout;
 			if (ev->ev_res & EV_TIMEOUT) {
 				relative_to = ev->ev_timeout;
@@ -1554,8 +1564,12 @@ event_persist_closure(struct event_base *base, struct event *ev)
 				relative_to = now;
 			}
 		}
+
+		event_debug(("evetn_persist_closure: 6"));
 		evutil_timeradd(&relative_to, &delay, &run_at);
 		if (evutil_timercmp(&run_at, &now, <)) {
+
+			event_debug(("evetn_persist_closure: 7"));
 			/* Looks like we missed at least one invocation due to
 			 * a clock jump, not running the event loop for a
 			 * while, really slow callbacks, or
@@ -1567,17 +1581,22 @@ event_persist_closure(struct event_base *base, struct event *ev)
 		event_add_nolock_(ev, &run_at, 1);
 	}
 
+    event_debug(("evetn_persist_closure: 8"));
 	// Save our callback before we release the lock
 	evcb_callback = ev->ev_callback;
         evcb_fd = ev->ev_fd;
         evcb_res = ev->ev_res;
         evcb_arg = ev->ev_arg;
 
+    event_debug(("evetn_persist_closure: 9"));
 	// Release the lock
  	EVBASE_RELEASE_LOCK(base, th_base_lock);
 
+    event_debug(("evetn_persist_closure: 10"));
 	// Execute the callback
         (evcb_callback)(evcb_fd, evcb_res, evcb_arg);
+
+	event_debug(("evetn_persist_closure: 11, end"));
 }
 
 /*
@@ -1592,14 +1611,20 @@ event_process_active_single_queue(struct event_base *base,
     struct evcallback_list *activeq,
     int max_to_process, const struct timeval *endtime)
 {
+	event_debug(("event_process_active_single_queue: 1"));
+
 	struct event_callback *evcb;
 	int count = 0;
 
 	EVUTIL_ASSERT(activeq != NULL);
 
 	for (evcb = TAILQ_FIRST(activeq); evcb; evcb = TAILQ_FIRST(activeq)) {
+		
+		event_debug(("event_process_active_single_queue: 2"));
 		struct event *ev=NULL;
 		if (evcb->evcb_flags & EVLIST_INIT) {
+
+			event_debug(("event_process_active_single_queue: 3"));
 			ev = event_callback_to_event(evcb);
 
 			if (ev->ev_events & EV_PERSIST || ev->ev_flags & EVLIST_FINALIZING)
@@ -1614,6 +1639,8 @@ event_process_active_single_queue(struct event_base *base,
 			    ev->ev_res & EV_CLOSED ? "EV_CLOSED " : " ",
 			    ev->ev_callback));
 		} else {
+
+			event_debug(("event_process_active_single_queue: 4"));
 			event_queue_remove_active(base, evcb);
 			event_debug(("event_process_active: event_callback %p, "
 				"closure %d, call %p",
@@ -1629,16 +1656,21 @@ event_process_active_single_queue(struct event_base *base,
 		base->current_event_waiters = 0;
 #endif
 
+
+        event_debug(("event_process_active_single_queue: 6"));
 		switch (evcb->evcb_closure) {
 		case EV_CLOSURE_EVENT_SIGNAL:
+		    event_debug(("event_process_active_single_queue: 7"));
 			EVUTIL_ASSERT(ev != NULL);
 			event_signal_closure(base, ev);
 			break;
 		case EV_CLOSURE_EVENT_PERSIST:
+		    event_debug(("event_process_active_single_queue: 8"));
 			EVUTIL_ASSERT(ev != NULL);
 			event_persist_closure(base, ev);
 			break;
 		case EV_CLOSURE_EVENT: {
+			event_debug(("event_process_active_single_queue: 9"));
 			void (*evcb_callback)(evutil_socket_t, short, void *);
 			EVUTIL_ASSERT(ev != NULL);
 			evcb_callback = *ev->ev_callback;
@@ -1647,6 +1679,7 @@ event_process_active_single_queue(struct event_base *base,
 		}
 		break;
 		case EV_CLOSURE_CB_SELF: {
+			event_debug(("event_process_active_single_queue: 10"));
 			void (*evcb_selfcb)(struct event_callback *, void *) = evcb->evcb_cb_union.evcb_selfcb;
 			EVBASE_RELEASE_LOCK(base, th_base_lock);
 			evcb_selfcb(evcb, evcb->evcb_arg);
@@ -1654,6 +1687,7 @@ event_process_active_single_queue(struct event_base *base,
 		break;
 		case EV_CLOSURE_EVENT_FINALIZE:
 		case EV_CLOSURE_EVENT_FINALIZE_FREE: {
+			event_debug(("event_process_active_single_queue: 11"));
 			void (*evcb_evfinalize)(struct event *, void *);
 			int evcb_closure = evcb->evcb_closure;
 			EVUTIL_ASSERT(ev != NULL);
@@ -1668,6 +1702,7 @@ event_process_active_single_queue(struct event_base *base,
 		}
 		break;
 		case EV_CLOSURE_CB_FINALIZE: {
+			event_debug(("event_process_active_single_queue: 13"));
 			void (*evcb_cbfinalize)(struct event_callback *, void *) = evcb->evcb_cb_union.evcb_cbfinalize;
 			base->current_event = NULL;
 			EVUTIL_ASSERT((evcb->evcb_flags & EVLIST_FINALIZING));
@@ -1676,18 +1711,22 @@ event_process_active_single_queue(struct event_base *base,
 		}
 		break;
 		default:
+		    event_debug(("event_process_active_single_queue: 14"));
 			EVUTIL_ASSERT(0);
 		}
 
+        event_debug(("event_process_active_single_queue: 15"));
 		EVBASE_ACQUIRE_LOCK(base, th_base_lock);
 		base->current_event = NULL;
 #ifndef EVENT__DISABLE_THREAD_SUPPORT
 		if (base->current_event_waiters) {
+			event_debug(("event_process_active_single_queue: 16"));
 			base->current_event_waiters = 0;
 			EVTHREAD_COND_BROADCAST(base->current_event_cond);
 		}
 #endif
 
+        event_debug(("event_process_active_single_queue: 17"));
 		if (base->event_break)
 			return -1;
 		if (count >= max_to_process)
@@ -1702,6 +1741,8 @@ event_process_active_single_queue(struct event_base *base,
 		if (base->event_continue)
 			break;
 	}
+
+    event_debug(("event_process_active_single_queue: 18, end, count: %d", count));
 	return count;
 }
 
@@ -1714,6 +1755,8 @@ event_process_active_single_queue(struct event_base *base,
 static int
 event_process_active(struct event_base *base)
 {
+
+	event_debug(("event_process_active: 1"));
 	/* Caller must hold th_base_lock */
 	struct evcallback_list *activeq = NULL;
 	int i, c = 0;
@@ -1753,6 +1796,7 @@ event_process_active(struct event_base *base)
 done:
 	base->event_running_priority = -1;
 
+    event_debug(("event_process_active: 2, end"));
 	return c;
 }
 
@@ -1877,6 +1921,7 @@ event_loop(int flags)
 int
 event_base_loop(struct event_base *base, int flags)
 {
+	event_debug(("event_base_loop: 1"));
 	const struct eventop *evsel = base->evsel;
 	struct timeval tv;
 	struct timeval *tv_p;
@@ -1974,6 +2019,7 @@ done:
 
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
 
+    event_debug(("event_base_loop: 2, end\n"));
 	return (retval);
 }
 
@@ -2866,6 +2912,8 @@ event_active_nolock_(struct event *ev, int res, short ncalls)
 {
 	struct event_base *base;
 
+	event_debug(("event_active_nolock_: 1"));
+
 	event_debug(("event_active: %p (fd "EV_SOCK_FMT"), res %d, callback %p",
 		ev, EV_SOCK_ARG(ev->ev_fd), (int)res, ev->ev_callback));
 
@@ -2909,7 +2957,10 @@ event_active_nolock_(struct event *ev, int res, short ncalls)
 		ev->ev_pncalls = NULL;
 	}
 
+    event_debug(("event_active_nolock_: 2"));
 	event_callback_activate_nolock_(base, event_to_event_callback(ev));
+
+    event_debug(("event_active_nolock_: 3, end"));
 }
 
 void
