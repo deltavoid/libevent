@@ -147,3 +147,5 @@ cscope*
 /*.tar.gz
 
 /.vagrant
+
+_build 
