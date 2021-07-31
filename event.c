@@ -2019,7 +2019,7 @@ done:
 
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
 
-    event_debug(("event_base_loop: 2, end\n"));
+    event_debug(("event_base_loop: 2, end"));
 	return (retval);
 }
 
